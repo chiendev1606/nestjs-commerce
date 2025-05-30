@@ -1,7 +1,7 @@
-import { Exclude, Type } from 'class-transformer'
+import { UserStatus } from '@prisma/client'
 import { IsString, Length } from 'class-validator'
-import { Match } from 'src/shared/decorators/custom-validator.decorator'
-import { SuccessResDTO } from 'src/shared/shared.dto'
+import { createZodDto } from 'nestjs-zod'
+import { z } from 'zod'
 
 export class LoginBodyDTO {
   @IsString()
@@ -20,37 +20,43 @@ export class LoginResDTO {
   }
 }
 
-export class RegisterBodyDTO extends LoginBodyDTO {
-  @IsString({ message: 'Tên phải là chuỗi' })
-  name: string
+const registerBodySchema = z
+  .object({
+    email: z.string().email(),
+    password: z.string().min(6).max(20),
+    confirmPassword: z.string().min(6).max(20),
+    name: z.string(),
+    phoneNumber: z.string().min(10).max(11),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'confirmPassword is not match password',
+        path: ['password'],
+      })
+    }
+  })
 
-  @IsString()
-  @Match('password', { message: 'Mật khẩu không khớp' })
-  confirmPassword: string
-}
+export class RegisterBodyDTO extends createZodDto(registerBodySchema) {}
 
-class RegisterData {
-  id: number
-  email: string
-  name: string
-  @Exclude() password: string
-  createdAt: Date
-  updatedAt: Date
+const userSchema = z.object({
+  id: z.number(),
+  email: z.string(),
+  name: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  roleId: z.number(),
+  createdById: z.number().nullable(),
+  updatedById: z.number().nullable(),
+  deletedAt: z.date().nullable(),
+  phoneNumber: z.string(),
+  avatar: z.string().nullable(),
+  status: z.nativeEnum(UserStatus),
+})
 
-  constructor(partial: Partial<RegisterData>) {
-    Object.assign(this, partial)
-  }
-}
-
-export class RegisterResDTO extends SuccessResDTO {
-  @Type(() => RegisterData)
-  data: RegisterData
-
-  constructor(partial: Partial<RegisterResDTO>) {
-    super(partial)
-    Object.assign(this, partial)
-  }
-}
+export class RegisterResDTO extends createZodDto(userSchema) {}
 
 export class RefreshTokenBodyDTO {
   @IsString()
