@@ -1,9 +1,15 @@
-import { ConflictException, Injectable, UnauthorizedException, UnprocessableEntityException } from '@nestjs/common'
-import { LoginBodyDTO, RegisterBodyDTO } from 'src/routes/auth/auth.dto'
-import { isNotFoundPrismaError, isUniqueConstraintPrismaError } from 'src/shared/helpers'
+import { Injectable, UnauthorizedException, UnprocessableEntityException } from '@nestjs/common'
+import { addMilliseconds } from 'date-fns'
+import ms from 'ms'
+import { LoginBodyDTO } from 'src/routes/auth/auth.dto'
+import envConfig from 'src/shared/config'
+import { generateVerificationCode, isNotFoundPrismaError, isUniqueConstraintPrismaError } from 'src/shared/helpers'
+import { SharedUserRepository } from 'src/shared/repositories/shared-user.repo'
 import { HashingService } from 'src/shared/services/hashing.service'
 import { PrismaService } from 'src/shared/services/prisma.service'
 import { TokenService } from 'src/shared/services/token.service'
+import { RegisterBodyType, SendOtpBodyType } from './auth.model'
+import { AuthRepository } from './auth.repo'
 import { RolesService } from './roles.service'
 
 @Injectable()
@@ -13,31 +19,45 @@ export class AuthService {
     private readonly prismaService: PrismaService,
     private readonly tokenService: TokenService,
     private readonly rolesService: RolesService,
+    private readonly authRepo: AuthRepository,
+    private readonly sharedUserRepository: SharedUserRepository,
   ) {}
-  async register(body: RegisterBodyDTO) {
+  async register(body: RegisterBodyType) {
     try {
       const clientRoleId = await this.rolesService.getClientRoleId()
       const hashedPassword = await this.hashingService.hash(body.password)
-      const user = await this.prismaService.user.create({
-        data: {
-          email: body.email,
-          password: hashedPassword,
-          name: body.name,
-          phoneNumber: body.phoneNumber,
-          roleId: clientRoleId,
-        },
-        omit: {
-          password: true,
-          totpSecret: true,
-        },
-      })
+      const user = await this.authRepo.createUser({ ...body, password: hashedPassword, roleId: clientRoleId })
       return user
     } catch (error) {
       if (isUniqueConstraintPrismaError(error)) {
-        throw new ConflictException('Email already exists')
+        throw new UnprocessableEntityException([
+          {
+            message: 'Email already exists',
+            path: 'email',
+          },
+        ])
       }
       throw error
     }
+  }
+  async sendOtp(body: SendOtpBodyType) {
+    const existUser = await this.sharedUserRepository.findUniqueUser({ email: body.email })
+    if (existUser) {
+      throw new UnprocessableEntityException([
+        {
+          message: 'Email already exists',
+          path: 'email',
+        },
+      ])
+    }
+    const code = generateVerificationCode()
+    const verificationCode = await this.authRepo.createVerificationCode({
+      code,
+      email: body.email,
+      type: body.type,
+      expiresAt: addMilliseconds(new Date(), ms(envConfig.OTP_EXPIRES_IN as ms.StringValue)),
+    })
+    return verificationCode
   }
 
   async login(body: LoginBodyDTO) {

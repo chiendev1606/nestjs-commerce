@@ -9,6 +9,7 @@ import {
   RefreshTokenResDTO,
   RegisterBodyDTO,
   RegisterResDTO,
+  SendOtpBodyDTO,
 } from 'src/routes/auth/auth.dto'
 import { AuthService } from 'src/routes/auth/auth.service'
 
@@ -20,6 +21,11 @@ export class AuthController {
   @Post('register')
   async register(@Body() body: RegisterBodyDTO) {
     return await this.authService.register(body)
+  }
+
+  @Post('otp')
+  sendOtp(@Body() body: SendOtpBodyDTO) {
+    return this.authService.sendOtp(body)
   }
 
   @Post('login')
