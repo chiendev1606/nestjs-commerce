@@ -1,15 +1,7 @@
-import { IsString, Length } from 'class-validator'
+import { IsString } from 'class-validator'
 import { createZodDto } from 'nestjs-zod'
-import { registerBodySchema, sendOtpBodySchema } from './auth.model'
 import { userSchema } from 'src/shared/models/shared-user.model'
-
-export class LoginBodyDTO {
-  @IsString()
-  email: string
-  @IsString()
-  @Length(6, 20, { message: 'Mật khẩu phải từ 6 đến 20 ký tự' })
-  password: string
-}
+import { deviceSchema, loginBodySchema, refreshTokenSchema, registerBodySchema, sendOtpBodySchema } from './auth.model'
 
 export class LoginResDTO {
   accessToken: string
@@ -40,4 +32,10 @@ export class LogoutResDTO {
   }
 }
 
+export class DeviceDTO extends createZodDto(deviceSchema) {}
+
+export class RefreshTokenDTO extends createZodDto(refreshTokenSchema) {}
+
 export class SendOtpBodyDTO extends createZodDto(sendOtpBodySchema) {}
+
+export class LoginBodyDTO extends createZodDto(loginBodySchema) {}

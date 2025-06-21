@@ -1,9 +1,8 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common'
+import { Body, Controller, HttpCode, HttpStatus, Ip, Post, Req } from '@nestjs/common'
 import { ZodSerializerDto } from 'nestjs-zod'
 import {
   LoginBodyDTO,
   LoginResDTO,
-  LogoutBodyDTO,
   LogoutResDTO,
   RefreshTokenBodyDTO,
   RefreshTokenResDTO,
@@ -12,6 +11,7 @@ import {
   SendOtpBodyDTO,
 } from 'src/routes/auth/auth.dto'
 import { AuthService } from 'src/routes/auth/auth.service'
+import { UserAgent } from 'src/shared/decorators/user-agent.decorator'
 
 @Controller('auth')
 export class AuthController {
@@ -29,18 +29,18 @@ export class AuthController {
   }
 
   @Post('login')
-  async login(@Body() body: LoginBodyDTO) {
-    return new LoginResDTO(await this.authService.login(body))
+  async login(@Body() body: LoginBodyDTO, @Ip() ip: string, @UserAgent() userAgent: string) {
+    return this.authService.login(body, ip, userAgent)
   }
 
-  @Post('refresh-token')
-  @HttpCode(HttpStatus.OK)
-  async refreshToken(@Body() body: RefreshTokenBodyDTO) {
-    return new RefreshTokenResDTO(await this.authService.refreshToken(body.refreshToken))
-  }
+  // @Post('refresh-token')
+  // @HttpCode(HttpStatus.OK)
+  // async refreshToken(@Body() body: RefreshTokenBodyDTO) {
+  //   return new RefreshTokenResDTO(await this.authService.refreshToken(body.refreshToken))
+  // }
 
-  @Post('logout')
-  async logout(@Body() body: LogoutBodyDTO) {
-    return new LogoutResDTO(await this.authService.logout(body.refreshToken))
-  }
+  // @Post('logout')
+  // async logout(@Body() body: LogoutBodyDTO) {
+  //   return new LogoutResDTO(await this.authService.logout(body.refreshToken))
+  // }
 }

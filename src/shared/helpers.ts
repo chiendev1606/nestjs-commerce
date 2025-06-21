@@ -11,5 +11,5 @@ export function isNotFoundPrismaError(error: any): error is Prisma.PrismaClientK
 }
 
 export function generateVerificationCode() {
-  return String(randomInt(1000000, 10000000)).padStart(6, '0')
+  return String(randomInt(100000, 1000000)).padStart(6, '0')
 }
