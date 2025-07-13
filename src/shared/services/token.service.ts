@@ -15,7 +15,7 @@ export class TokenService {
     })
   }
 
-  signRefreshToken(payload: { userId: number }) {
+  signRefreshToken(payload: { userId: number; roleId: number; deviceId: string }) {
     return this.jwtService.sign(payload, {
       secret: envConfig.REFRESH_TOKEN_SECRET,
       expiresIn: envConfig.REFRESH_TOKEN_EXPIRES_IN,

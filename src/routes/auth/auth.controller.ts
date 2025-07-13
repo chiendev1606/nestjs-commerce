@@ -33,11 +33,11 @@ export class AuthController {
     return this.authService.login(body, ip, userAgent)
   }
 
-  // @Post('refresh-token')
-  // @HttpCode(HttpStatus.OK)
-  // async refreshToken(@Body() body: RefreshTokenBodyDTO) {
-  //   return new RefreshTokenResDTO(await this.authService.refreshToken(body.refreshToken))
-  // }
+  @Post('refresh-token')
+  @HttpCode(HttpStatus.OK)
+  async refreshToken(@Body() body: RefreshTokenBodyDTO) {
+    return new RefreshTokenResDTO(await this.authService.refreshToken(body.refreshToken))
+  }
 
   // @Post('logout')
   // async logout(@Body() body: LogoutBodyDTO) {
