@@ -71,7 +71,7 @@ export class AuthRepository {
     })
   }
 
-  updateDevice(data: { id: number; isActive: boolean; ip: string; userAgent: string }) {
+  updateDevice(data: Partial<deviceCreateType> & { id: number }) {
     return this.prismaService.device.update({
       where: { id: Number(data.id) },
       data: {

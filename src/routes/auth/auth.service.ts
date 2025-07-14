@@ -1,18 +1,17 @@
 import { Injectable, UnauthorizedException, UnprocessableEntityException } from '@nestjs/common'
 import { addMilliseconds } from 'date-fns'
 import ms from 'ms'
-import { LoginBodyDTO } from 'src/routes/auth/auth.dto'
 import envConfig from 'src/shared/config'
+import { TypeOfVerificationCode } from 'src/shared/constants/auth.constant'
 import { generateVerificationCode, isNotFoundPrismaError, isUniqueConstraintPrismaError } from 'src/shared/helpers'
 import { SharedUserRepository } from 'src/shared/repositories/shared-user.repo'
+import { EmailService } from 'src/shared/services/email.service'
 import { HashingService } from 'src/shared/services/hashing.service'
 import { PrismaService } from 'src/shared/services/prisma.service'
 import { TokenService } from 'src/shared/services/token.service'
-import { deviceCreateType, LoginBodyType, RegisterBodyType, SendOtpBodyType, tokenType } from './auth.model'
+import { LoginBodyType, RegisterBodyType, SendOtpBodyType, tokenType } from './auth.model'
 import { AuthRepository } from './auth.repo'
 import { RolesService } from './roles.service'
-import { TypeOfVerificationCode } from 'src/shared/constants/auth.constant'
-import { EmailService } from 'src/shared/services/email.service'
 
 @Injectable()
 export class AuthService {
@@ -198,24 +197,18 @@ export class AuthService {
       if (isNotFoundPrismaError(error)) {
         throw new UnauthorizedException('Refresh token has been revoked')
       }
-      throw new UnauthorizedException('Refresh token is invalid')
+      throw new UnauthorizedException()
     }
   }
 
   async logout(refreshToken: string) {
     try {
-      // 1. Kiểm tra refreshToken có hợp lệ không
       await this.tokenService.verifyRefreshToken(refreshToken)
-      // 2. Xóa refreshToken trong database
-      await this.prismaService.refreshToken.delete({
-        where: {
-          token: refreshToken,
-        },
-      })
+      const { deviceId } = await this.authRepo.findUniqueRefreshToken({ token: refreshToken })
+      await this.authRepo.updateDevice({ id: Number(deviceId), isActive: false })
+      await this.authRepo.deleteRefreshToken({ token: refreshToken })
       return { message: 'Logout successfully' }
     } catch (error) {
-      // Trường hợp đã refresh token rồi, hãy thông báo cho user biết
-      // refresh token của họ đã bị đánh cắp
       if (isNotFoundPrismaError(error)) {
         throw new UnauthorizedException('Refresh token has been revoked')
       }

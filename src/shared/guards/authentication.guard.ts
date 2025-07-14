@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common'
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Global } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { AuthType, ConditionGuard } from 'src/shared/constants/auth.constant'
 import { AUTH_TYPE_KEY, AuthTypeDecoratorPayload } from 'src/shared/decorators/auth.decorator'
@@ -6,6 +6,7 @@ import { AccessTokenGuard } from 'src/shared/guards/access-token.guard'
 import { APIKeyGuard } from 'src/shared/guards/api-key.guard'
 
 @Injectable()
+@Global()
 export class AuthenticationGuard implements CanActivate {
   private readonly authTypeGuardMap: Record<string, CanActivate> = {
     [AuthType.Bearer]: this.accessTokenGuard,
@@ -21,7 +22,7 @@ export class AuthenticationGuard implements CanActivate {
     const authTypeValue = this.reflector.getAllAndOverride<AuthTypeDecoratorPayload | undefined>(AUTH_TYPE_KEY, [
       context.getHandler(),
       context.getClass(),
-    ]) ?? { authTypes: [AuthType.None], options: { condition: ConditionGuard.And } }
+    ]) ?? { authTypes: [AuthType.Bearer], options: { condition: ConditionGuard.And } }
     const guards = authTypeValue.authTypes.map((authType) => this.authTypeGuardMap[authType])
     let error = new UnauthorizedException()
     if (authTypeValue.options.condition === ConditionGuard.Or) {
