@@ -8,7 +8,7 @@ import { SharedUserRepository } from 'src/shared/repositories/shared-user.repo'
 import { HashingService } from 'src/shared/services/hashing.service'
 import { PrismaService } from 'src/shared/services/prisma.service'
 import { TokenService } from 'src/shared/services/token.service'
-import { deviceCreateType, LoginBodyType, RegisterBodyType, SendOtpBodyType } from './auth.model'
+import { deviceCreateType, LoginBodyType, RegisterBodyType, SendOtpBodyType, tokenType } from './auth.model'
 import { AuthRepository } from './auth.repo'
 import { RolesService } from './roles.service'
 import { TypeOfVerificationCode } from 'src/shared/constants/auth.constant'
@@ -127,20 +127,26 @@ export class AuthService {
       createdAt: new Date(),
     })
 
-    const tokens = await this.generateTokens({ userId: user.id, roleId: user.roleId, deviceId: device.id })
+    const tokens = await this.generateTokens({
+      userId: user.id,
+      roleId: user.roleId,
+      deviceId: device.id,
+      roleName: user.role.name,
+    })
 
     return tokens
   }
 
-  async generateTokens(payload: { userId: number; roleId: number; deviceId: number }) {
+  async generateTokens(payload: { userId: number; roleId: number; deviceId: number; roleName: string }) {
     const tokenPayload = {
       userId: payload.userId,
       roleId: payload.roleId,
       deviceId: String(payload.deviceId),
+      roleName: payload.roleName,
     }
     const [accessToken, refreshToken] = await Promise.all([
       this.tokenService.signAccessToken(tokenPayload),
-      this.tokenService.signRefreshToken(tokenPayload),
+      this.tokenService.signRefreshToken({ userId: payload.userId }),
     ])
     const decodedRefreshToken = await this.tokenService.verifyRefreshToken(refreshToken)
     await this.authRepo.createRefreshToken({
@@ -152,31 +158,47 @@ export class AuthService {
     return { accessToken, refreshToken }
   }
 
-  async refreshToken(refreshToken: string) {
+  async refreshToken({
+    refreshToken,
+    ip,
+    userAgent,
+  }: {
+    refreshToken: string
+    ip: string
+    userAgent: string
+  }): Promise<tokenType> {
     try {
-      // 1. Kiểm tra refreshToken có hợp lệ không
-      const { userId } = await this.tokenService.verifyRefreshToken(refreshToken)
-      // 2. Kiểm tra refreshToken có tồn tại trong database không
-      await this.prismaService.refreshToken.findUniqueOrThrow({
-        where: {
-          token: refreshToken,
+      await this.tokenService.verifyRefreshToken(refreshToken)
+      await this.authRepo.findUniqueRefreshToken({ token: refreshToken })
+
+      const {
+        deviceId,
+        user: {
+          roleId,
+          id: userId,
+          role: { name: roleName },
         },
+      } = await this.authRepo.findUniqueRefreshToken({ token: refreshToken })
+
+      const $updateDevice = this.authRepo.updateDevice({ id: Number(deviceId), isActive: true, ip, userAgent })
+
+      const $deleteRefreshToken = this.authRepo.deleteRefreshToken({ token: refreshToken })
+
+      const $generateTokens = this.generateTokens({
+        userId,
+        roleId,
+        deviceId,
+        roleName,
       })
-      // 3. Xóa refreshToken cũ
-      await this.prismaService.refreshToken.delete({
-        where: {
-          token: refreshToken,
-        },
-      })
-      // 4. Tạo mới accessToken và refreshToken
-      return await this.generateTokens({ userId })
+
+      const [, , tokens] = await Promise.all([$updateDevice, $deleteRefreshToken, $generateTokens])
+
+      return tokens
     } catch (error) {
-      // Trường hợp đã refresh token rồi, hãy thông báo cho user biết
-      // refresh token của họ đã bị đánh cắp
       if (isNotFoundPrismaError(error)) {
         throw new UnauthorizedException('Refresh token has been revoked')
       }
-      throw new UnauthorizedException()
+      throw new UnauthorizedException('Refresh token is invalid')
     }
   }
 

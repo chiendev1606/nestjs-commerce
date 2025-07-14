@@ -63,6 +63,11 @@ export const refreshTokenSchema = z.object({
   createdAt: z.date(),
 })
 
+export const tokenSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+})
+
 export type RegisterBodyType = z.infer<typeof registerBodySchema>
 export type VerificationCodeType = z.infer<typeof verificationCodeSchema>
 export type LoginBodyType = z.infer<typeof loginBodySchema>
@@ -70,3 +75,4 @@ export type SendOtpBodyType = z.infer<typeof sendOtpBodySchema>
 export type LoginResType = z.infer<typeof loginResSchema>
 export type deviceCreateType = z.infer<typeof deviceSchema>
 export type refreshTokenType = z.infer<typeof refreshTokenSchema>
+export type tokenType = z.infer<typeof tokenSchema>

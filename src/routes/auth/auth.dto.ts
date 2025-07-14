@@ -1,16 +1,16 @@
 import { IsString } from 'class-validator'
 import { createZodDto } from 'nestjs-zod'
 import { userSchema } from 'src/shared/models/shared-user.model'
-import { deviceSchema, loginBodySchema, refreshTokenSchema, registerBodySchema, sendOtpBodySchema } from './auth.model'
+import {
+  deviceSchema,
+  loginBodySchema,
+  refreshTokenSchema,
+  registerBodySchema,
+  sendOtpBodySchema,
+  tokenSchema,
+} from './auth.model'
 
-export class LoginResDTO {
-  accessToken: string
-  refreshToken: string
-
-  constructor(partial: Partial<LoginResDTO>) {
-    Object.assign(this, partial)
-  }
-}
+export class LoginResDTO extends createZodDto(tokenSchema) {}
 
 export class RegisterBodyDTO extends createZodDto(registerBodySchema) {}
 

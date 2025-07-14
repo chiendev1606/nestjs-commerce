@@ -71,6 +71,37 @@ export class AuthRepository {
     })
   }
 
+  updateDevice(data: { id: number; isActive: boolean; ip: string; userAgent: string }) {
+    return this.prismaService.device.update({
+      where: { id: Number(data.id) },
+      data: {
+        isActive: data.isActive,
+        lastActive: new Date(),
+        ip: data.ip,
+        userAgent: data.userAgent,
+      },
+    })
+  }
+
+  findUniqueRefreshToken(data: { token: string }) {
+    return this.prismaService.refreshToken.findUniqueOrThrow({
+      where: { token: data.token },
+      include: {
+        user: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    })
+  }
+
+  deleteRefreshToken(data: { token: string }) {
+    return this.prismaService.refreshToken.delete({
+      where: { token: data.token },
+    })
+  }
+
   createRefreshToken(data: { userId: number; deviceId: number; token: string; expiresAt: Date }) {
     return this.prismaService.refreshToken.create({
       data: {
