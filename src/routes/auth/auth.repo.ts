@@ -4,6 +4,8 @@ import { deviceCreateType, RegisterBodyType, VerificationCodeType } from './auth
 import ms from 'ms'
 import { addMilliseconds } from 'date-fns'
 import envConfig from 'src/shared/config'
+import { UserType } from 'src/shared/models/shared-user.model'
+import { TypeOfVerificationCodeType } from 'src/shared/constants/auth.constant'
 
 @Injectable()
 export class AuthRepository {
@@ -29,9 +31,11 @@ export class AuthRepository {
     return this.prismaService.verificationCode.upsert({
       where: {
         email: data.email,
+        type: data.type,
       },
       update: {
         code: data.code,
+        type: data.type,
         expiresAt: addMilliseconds(new Date(), ms(envConfig.OTP_EXPIRES_IN as ms.StringValue)),
       },
       create: data,
@@ -55,6 +59,12 @@ export class AuthRepository {
       include: {
         role: true,
       },
+    })
+  }
+
+  deleteVerificationCode(data: { email: string; type: TypeOfVerificationCodeType; code: string }) {
+    return this.prismaService.verificationCode.delete({
+      where: { email: data.email, type: data.type, code: data.code },
     })
   }
 
@@ -110,6 +120,13 @@ export class AuthRepository {
         deviceId: data.deviceId,
         expiresAt: data.expiresAt,
       },
+    })
+  }
+
+  updateUser(data: Partial<UserType> & { id: number }) {
+    return this.prismaService.user.update({
+      where: { id: data.id },
+      data: data,
     })
   }
 }

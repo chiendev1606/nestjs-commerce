@@ -18,4 +18,8 @@ export type ConditionGuardType = (typeof ConditionGuard)[keyof typeof ConditionG
 export const TypeOfVerificationCode = {
   Register: 'REGISTER',
   ForgotPassword: 'FORGOT_PASSWORD',
+  Login: 'LOGIN',
+  Disable2FA: 'DISABLE_2FA',
 } as const
+
+export type TypeOfVerificationCodeType = (typeof TypeOfVerificationCode)[keyof typeof TypeOfVerificationCode]

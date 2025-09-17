@@ -7,9 +7,10 @@ import { AuthModule } from './routes/auth/auth.module'
 import CustomZodValidationPipe from './shared/pipes/zod-validation'
 import { SharedModule } from './shared/shared.module'
 import { HttpExceptionFilter } from './shared/http-exception.filter'
+import { LanguageModule } from './routes/language/language.module'
 
 @Module({
-  imports: [SharedModule, AuthModule],
+  imports: [SharedModule, AuthModule, LanguageModule],
   controllers: [AppController],
   providers: [
     AppService,

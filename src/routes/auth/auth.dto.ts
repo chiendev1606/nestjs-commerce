@@ -1,14 +1,16 @@
-import { IsString } from 'class-validator'
 import { createZodDto } from 'nestjs-zod'
 import { userSchema } from 'src/shared/models/shared-user.model'
 import {
   deviceSchema,
+  disable2FABodySchema,
+  forgotPasswordBodySchema,
   loginBodySchema,
   messageSchema,
   refreshTokenSchema,
   registerBodySchema,
   sendOtpBodySchema,
   tokenSchema,
+  TwoFAResSchema,
 } from './auth.model'
 
 export class LoginResDTO extends createZodDto(tokenSchema) {}
@@ -39,3 +41,9 @@ export class LoginBodyDTO extends createZodDto(loginBodySchema) {}
 export class MessageResDTO extends createZodDto(messageSchema) {}
 
 export class RefreshTokenBodyDTO extends createZodDto(tokenSchema.omit({ accessToken: true })) {}
+
+export class ForgotPasswordBodyDTO extends createZodDto(forgotPasswordBodySchema) {}
+
+export class TwoFASetupResDTO extends createZodDto(TwoFAResSchema) {}
+
+export class disable2FABodyDTO extends createZodDto(disable2FABodySchema) {}

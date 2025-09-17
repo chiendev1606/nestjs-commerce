@@ -30,12 +30,55 @@ const verificationCodeSchema = z.object({
   code: z.string(),
   expiresAt: z.date(),
   createdAt: z.date(),
-  type: z.enum([TypeOfVerificationCode.Register, TypeOfVerificationCode.ForgotPassword]),
+  type: z.enum([
+    TypeOfVerificationCode.Register,
+    TypeOfVerificationCode.ForgotPassword,
+    TypeOfVerificationCode.Login,
+    TypeOfVerificationCode.Disable2FA,
+  ]),
 })
-export const loginBodySchema = z.object({
-  email: z.string(),
-  password: z.string(),
+
+export const forgotPasswordBodySchema = userSchema
+  .pick({
+    email: true,
+  })
+  .extend({
+    code: z.string().length(6),
+    password: z.string().min(6).max(20),
+    confirmPassword: z.string().min(6).max(20),
+  })
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'confirmPassword is not match password',
+        path: ['password'],
+      })
+    }
+  })
+
+const twoFABodySchema = z.object({
+  code: z.string().length(6).optional(),
+  totpCode: z.string().length(6).optional(),
 })
+
+export const loginBodySchema = userSchema
+  .pick({
+    email: true,
+    password: true,
+  })
+  .merge(twoFABodySchema)
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.code && data.totpCode) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['code', 'totpCode'],
+        message: 'code and totpCode cannot be used together',
+      })
+    }
+  })
+
 export const sendOtpBodySchema = verificationCodeSchema.pick({
   email: true,
   type: true,
@@ -71,6 +114,21 @@ export const messageSchema = z.object({
   message: z.string(),
 })
 
+export const TwoFAResSchema = z.object({
+  secret: z.string(),
+  url: z.string().url(),
+})
+
+export const disable2FABodySchema = twoFABodySchema.superRefine((data, ctx) => {
+  if (data.code && data.totpCode) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['code', 'totpCode'],
+      message: 'code and totpCode cannot be used together',
+    })
+  }
+})
+
 export type RegisterBodyType = z.infer<typeof registerBodySchema>
 export type VerificationCodeType = z.infer<typeof verificationCodeSchema>
 export type LoginBodyType = z.infer<typeof loginBodySchema>
@@ -80,3 +138,7 @@ export type deviceCreateType = z.infer<typeof deviceSchema>
 export type refreshTokenType = z.infer<typeof refreshTokenSchema>
 export type tokenType = z.infer<typeof tokenSchema>
 export type messageType = z.infer<typeof messageSchema>
+export type forgotPasswordBodyType = z.infer<typeof forgotPasswordBodySchema>
+export type TwoFABodyType = z.infer<typeof twoFABodySchema>
+export type TwoFAResType = z.infer<typeof TwoFAResSchema>
+export type disable2FABodyType = z.infer<typeof disable2FABodySchema>

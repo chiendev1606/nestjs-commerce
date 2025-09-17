@@ -14,6 +14,8 @@ export const userSchema = z.object({
   phoneNumber: z.string(),
   avatar: z.string().nullable(),
   status: z.nativeEnum(UserStatus),
+  password: z.string(),
+  totpSecret: z.string().nullable(),
 })
 
 export type UserType = z.infer<typeof userSchema>

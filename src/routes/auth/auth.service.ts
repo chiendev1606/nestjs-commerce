@@ -1,80 +1,87 @@
-import { Injectable, UnauthorizedException, UnprocessableEntityException } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { addMilliseconds } from 'date-fns'
 import ms from 'ms'
 import envConfig from 'src/shared/config'
-import { TypeOfVerificationCode } from 'src/shared/constants/auth.constant'
+import { TypeOfVerificationCode, TypeOfVerificationCodeType } from 'src/shared/constants/auth.constant'
 import { generateVerificationCode, isNotFoundPrismaError, isUniqueConstraintPrismaError } from 'src/shared/helpers'
 import { SharedUserRepository } from 'src/shared/repositories/shared-user.repo'
 import { EmailService } from 'src/shared/services/email.service'
 import { HashingService } from 'src/shared/services/hashing.service'
-import { PrismaService } from 'src/shared/services/prisma.service'
 import { TokenService } from 'src/shared/services/token.service'
-import { LoginBodyType, RegisterBodyType, SendOtpBodyType, tokenType } from './auth.model'
+import {
+  EmailAlreadyExistsException,
+  EmailNotFoundException,
+  FailedToSendOTPException,
+  InvalidOTPException,
+  InvalidPasswordException,
+  OTPExpiredException,
+  RefreshTokenAlreadyUsedException,
+  UnauthorizedAccessException,
+  UserNotFoundException,
+} from './auth.error'
+import {
+  disable2FABodyType,
+  forgotPasswordBodyType,
+  LoginBodyType,
+  RegisterBodyType,
+  SendOtpBodyType,
+  tokenType,
+} from './auth.model'
 import { AuthRepository } from './auth.repo'
 import { RolesService } from './roles.service'
+import { TwoFactorService } from 'src/shared/services/two-factor.service'
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly hashingService: HashingService,
-    private readonly prismaService: PrismaService,
     private readonly emailService: EmailService,
     private readonly tokenService: TokenService,
     private readonly rolesService: RolesService,
     private readonly authRepo: AuthRepository,
     private readonly sharedUserRepository: SharedUserRepository,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
+
+  async validateVerificationCode(email: string, code: string, type: TypeOfVerificationCodeType) {
+    const existVerificationCode = await this.authRepo.findUniqueVerificationCode({
+      email,
+      type,
+      code,
+    })
+    if (!existVerificationCode) {
+      throw InvalidOTPException
+    }
+    if (existVerificationCode.expiresAt < new Date()) {
+      throw OTPExpiredException
+    }
+    await this.authRepo.deleteVerificationCode({ email, type, code })
+    return existVerificationCode
+  }
+
   async register(body: RegisterBodyType) {
     try {
-      const existVerificationCode = await this.authRepo.findUniqueVerificationCode({
-        email: body.email,
-        type: TypeOfVerificationCode.Register,
-        code: body.code,
-      })
-
-      if (!existVerificationCode) {
-        throw new UnprocessableEntityException([
-          {
-            message: 'Verification code is incorrect',
-            path: 'code',
-          },
-        ])
-      }
-
-      if (existVerificationCode.expiresAt < new Date()) {
-        throw new UnprocessableEntityException([
-          {
-            message: 'Verification code has expired',
-            path: 'code',
-          },
-        ])
-      }
+      await this.validateVerificationCode(body.email, body.code, TypeOfVerificationCode.Register)
 
       const clientRoleId = await this.rolesService.getClientRoleId()
       const hashedPassword = await this.hashingService.hash(body.password)
       const user = await this.authRepo.createUser({ ...body, password: hashedPassword, roleId: clientRoleId })
+
       return user
     } catch (error) {
       if (isUniqueConstraintPrismaError(error)) {
-        throw new UnprocessableEntityException([
-          {
-            message: 'Email already exists',
-            path: 'email',
-          },
-        ])
+        throw EmailAlreadyExistsException
       }
       throw error
     }
   }
   async sendOtp(body: SendOtpBodyType) {
     const existUser = await this.sharedUserRepository.findUniqueUser({ email: body.email })
-    if (existUser) {
-      throw new UnprocessableEntityException([
-        {
-          message: 'Email already exists',
-          path: 'email',
-        },
-      ])
+    if (existUser && body.type === TypeOfVerificationCode.Register) {
+      throw EmailAlreadyExistsException
+    }
+    if (!existUser && body.type === TypeOfVerificationCode.ForgotPassword) {
+      throw EmailNotFoundException
     }
     const code = generateVerificationCode()
     const verificationCode = await this.authRepo.createVerificationCode({
@@ -85,12 +92,7 @@ export class AuthService {
     })
     const { error } = await this.emailService.sendEmail({ code, email: body.email })
     if (error) {
-      throw new UnprocessableEntityException([
-        {
-          message: 'Failed to send email',
-          path: 'email',
-        },
-      ])
+      throw FailedToSendOTPException
     }
     return verificationCode
   }
@@ -99,22 +101,23 @@ export class AuthService {
     const user = await this.authRepo.findUniqueUserIncludeRole({ email: body.email })
 
     if (!user) {
-      throw new UnprocessableEntityException([
-        {
-          message: 'Email is incorrect',
-          path: 'email',
-        },
-      ])
+      throw EmailNotFoundException
     }
 
     const isPasswordMatch = await this.hashingService.compare(body.password, user.password)
     if (!isPasswordMatch) {
-      throw new UnprocessableEntityException([
-        {
-          field: 'password',
-          error: 'Password is incorrect',
-        },
-      ])
+      throw InvalidPasswordException
+    }
+
+    if (user.totpSecret && body.totpCode) {
+      const isTotpMatch = this.twoFactorService.verifyTOTP(user.totpSecret, body.totpCode)
+      if (!isTotpMatch) {
+        throw InvalidOTPException
+      }
+    }
+
+    if (body.code) {
+      await this.validateVerificationCode(user.email, body.code, TypeOfVerificationCode.Login)
     }
 
     const device = await this.authRepo.createDevice({
@@ -195,9 +198,9 @@ export class AuthService {
       return tokens
     } catch (error) {
       if (isNotFoundPrismaError(error)) {
-        throw new UnauthorizedException('Refresh token has been revoked')
+        throw RefreshTokenAlreadyUsedException
       }
-      throw new UnauthorizedException()
+      throw UnauthorizedAccessException
     }
   }
 
@@ -210,9 +213,55 @@ export class AuthService {
       return { message: 'Logout successfully' }
     } catch (error) {
       if (isNotFoundPrismaError(error)) {
-        throw new UnauthorizedException('Refresh token has been revoked')
+        throw RefreshTokenAlreadyUsedException
       }
-      throw new UnauthorizedException()
+      throw UnauthorizedAccessException
     }
+  }
+
+  async forgotPassword(body: forgotPasswordBodyType) {
+    const user = await this.authRepo.findUniqueUserIncludeRole({ email: body.email })
+    if (!user) {
+      throw EmailNotFoundException
+    }
+    await this.validateVerificationCode(body.email, body.code, TypeOfVerificationCode.ForgotPassword)
+    const hashedPassword = await this.hashingService.hash(body.password)
+    await this.authRepo.updateUser({ id: user.id, password: hashedPassword })
+    return { message: 'Password updated successfully' }
+  }
+
+  async setupTwoFactor(userId: number) {
+    const user = await this.authRepo.findUniqueUserIncludeRole({ id: userId })
+
+    if (!user) {
+      throw UserNotFoundException
+    }
+    const totp = this.twoFactorService.generateTOTP({ email: user.email })
+
+    await this.authRepo.updateUser({ id: user.id, totpSecret: totp.secret.base32 })
+
+    return { secret: totp.secret.base32, url: totp.toString() }
+  }
+
+  async disableTwoFactor({ userId, body }: { userId: number; body: disable2FABodyType }) {
+    const user = await this.authRepo.findUniqueUserIncludeRole({ id: userId })
+
+    if (!user) {
+      throw UserNotFoundException
+    }
+
+    if (user.totpSecret && body.totpCode) {
+      const isTotpMatch = this.twoFactorService.verifyTOTP(user.totpSecret, body.totpCode)
+      if (!isTotpMatch) {
+        throw InvalidOTPException
+      }
+    }
+
+    if (body.code) {
+      await this.validateVerificationCode(user.email, body.code, TypeOfVerificationCode.Disable2FA)
+    }
+    await this.authRepo.updateUser({ id: user.id, totpSecret: null })
+
+    return { message: 'Two-factor authentication disabled successfully' }
   }
 }
